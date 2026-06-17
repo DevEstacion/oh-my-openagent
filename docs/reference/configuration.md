@@ -192,6 +192,8 @@ Agent tab cycling defaults to Sisyphus, Hephaestus, Prometheus, Atlas. Override 
 | `textVerbosity`   | string        | Text verbosity: `low`, `medium`, `high`                |
 | `providerOptions` | object        | Provider-specific options                              |
 
+Prometheus is the exception for prompt replacement: its mandatory planner prompt always remains active so it can load `shared/ulw-plan` first. For `agents.prometheus`, both `prompt` and `prompt_append` are appended to the mandatory base prompt instead of replacing it.
+
 #### Anthropic Extended Thinking
 
 ```json
@@ -262,6 +264,8 @@ Object entries support: `model`, `variant`, `reasoningEffort`, `temperature`, `t
 #### File URIs for Prompts
 
 Both `prompt` and `prompt_append` support loading content from files via `file://` URIs. Category-level `prompt_append` supports the same URI forms.
+
+For Prometheus, file-backed `prompt` content is appended after the mandatory base prompt; it does not replace the base prompt.
 
 ```jsonc
 {
@@ -484,7 +488,7 @@ To disable the task system entirely, set `experimental.task_system` to `false`:
 
 Skills bring domain-specific expertise and embedded MCPs.
 
-Built-in skills: `playwright`, `playwright-cli`, `agent-browser`, `dev-browser`, `git-master`, `frontend-ui-ux`
+Built-in skills: `playwright`, `playwright-cli`, `agent-browser`, `dev-browser`, `git-master`, `frontend`
 
 Disable built-in skills: `{ "disabled_skills": ["playwright"] }`
 
@@ -619,10 +623,10 @@ Force-enable session notifications:
 
 ### MCPs
 
-Built-in MCPs (enabled by default): `websearch` (Exa AI), `context7` (library docs), `grep_app` (GitHub code search), `lsp` (local language-server tools), and `ast_grep` (local structural search/rewrite tools).
+Built-in MCPs (enabled by default): `websearch` (Exa AI), `context7` (library docs), `grep_app` (GitHub code search), and `lsp` (local language-server tools). Structural search and rewrite is provided by the `ast-grep` skill instead of a built-in MCP.
 
 ```json
-{ "disabled_mcps": ["websearch", "context7", "grep_app", "lsp", "ast_grep"] }
+{ "disabled_mcps": ["websearch", "context7", "grep_app", "lsp"] }
 ```
 
 ### LSP
@@ -1037,6 +1041,45 @@ The installer prepares Git Bash with normal detection, `OMO_CODEX_GIT_BASH_PATH`
 #### Google Auth
 
 Install [`opencode-antigravity-auth`](https://github.com/NoeFabris/opencode-antigravity-auth) for Google Gemini. Provides multi-account load balancing, dual quota, and variant-based thinking.
+
+##### Split Claude Routing
+
+Provider path affects the effective Claude context limit. Antigravity Claude
+models are the stable 200k lane. Direct Anthropic Claude models are the 1M lane
+for accounts and model IDs that support long context.
+
+Use Antigravity for cheaper or quota-balanced work where 200k context is enough.
+Use direct Anthropic for long-context planning, review, and research sessions
+where early compaction would lose important context.
+
+```jsonc
+{
+  "agents": {
+    // 200k lane: Google Antigravity Claude.
+    "explore": {
+      "model": "google/antigravity-claude-sonnet-4-6"
+    },
+    "librarian": {
+      "model": "google/antigravity-claude-sonnet-4-6"
+    },
+
+    // 1M lane: direct Anthropic, only for eligible long-context accounts/models.
+    "sisyphus": {
+      "model": "anthropic/claude-opus-4-6",
+      "variant": "max"
+    },
+    "oracle": {
+      "model": "anthropic/claude-opus-4-6"
+    }
+  }
+}
+```
+
+If you see an error like `prompt is too long ... > 200000`, check whether the
+agent is routed through `google/antigravity-*`. Move that agent to a direct
+`anthropic/*` model only when the account, model, and required beta/header setup
+support 1M context. Keep the Antigravity lane explicit when you want predictable
+200k behavior.
 
 #### Ollama
 
